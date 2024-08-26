@@ -1,0 +1,148 @@
+version: "3.5"
+services:
+  elasticsearch:
+    container_name: tcl-elasticsearch
+    environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - xpack.security.enabled=false
+    image: elasticsearch:${ELASTICSEARCH_VERSION}
+    networks:
+      - chat-network
+    ports:
+      - 9201:9200
+    volumes:
+      - /var/lib/elasticsearch/data
+  postgresql:
+    container_name: tcl-postgresql
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+    image: postgres:${POSTGRESQL_VERSION}
+    networks:
+      - chat-network
+    ports:
+      - 5455:${POSTGRES_PORT}
+    volumes:
+      - /var/lib/postgresql/data
+  pgadmin:
+    container_name: tcl-pgadmin
+    image: dpage/pgadmin4
+    ports:
+      - 8002:80
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      - postgresql
+    networks:
+      - chat-network
+    volumes:
+      - /var/lib/pgadmin/
+  temporal:
+    container_name: tcl-temporal
+    depends_on:
+      - postgresql
+      - elasticsearch
+    environment:
+      - DB=postgresql
+      - DB_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PWD=${POSTGRES_PASSWORD}
+      - POSTGRES_SEEDS=postgresql
+      #- DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - ES_PORT=9200
+      - ENABLE_ES=true
+      - ES_SEEDS=elasticsearch
+      - ES_VERSION=v7
+    image: temporalio/auto-setup:${TEMPORAL_VERSION}
+    networks:
+      - chat-network
+    ports:
+      - 7234:7233
+    # volumes:
+    #   - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+  temporal-admin-tools:
+    container_name: tcl-temporal-admin-tools
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    image: temporalio/admin-tools:${TEMPORAL_VERSION}
+    networks:
+      - chat-network
+    stdin_open: true
+    tty: true
+  temporal-ui:
+    container_name: tcl-temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+      - TEMPORAL_NOTIFY_ON_NEW_VERSION=false
+    image: temporalio/ui:${TEMPORAL_UI_VERSION}
+    networks:
+      - chat-network
+    ports:
+      - 8001:8080
+  redis:
+    container_name: tcl-redis
+    image: redis:latest
+    restart: always
+    ports:
+      - 6380:6379
+    volumes:
+      - /root/redis
+      - ./infrastructure/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DATABASES=1
+    networks:
+      - chat-network
+  chainlit:
+    container_name: tcl-chainlit
+    image: tcl-chainlit
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID}
+      - OPENAI_GATEWAY_URL=${OPENAI_GATEWAY_URL}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+    build:
+      context: .
+      dockerfile: dockerfile
+    networks:
+      - chat-network
+    ports: 
+      - 8000:8000
+  temporal_worker:
+    container_name: tcl-temporal-worker
+    image: tcl-temporal-worker
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID}
+      - OPENAI_GATEWAY_URL=${OPENAI_GATEWAY_URL}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+    depends_on:
+      - temporal
+    build:
+      context: .
+      dockerfile: temporal_worker.dockerfile
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge
+    name: chat-network

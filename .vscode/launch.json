@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Chainlit debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": ".venv/bin/chainlit",
+            "console": "integratedTerminal",
+            "args": [
+                "run",
+                "app.py",
+                "-h",
+                "--port",
+                "8000"
+            ]
+        },
+        {
+            "name": "Temporal worker debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "temporal_worker.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}
