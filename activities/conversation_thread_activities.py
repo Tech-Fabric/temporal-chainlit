@@ -32,6 +32,11 @@ class EventHandler(AsyncAssistantEventHandler):
     async def on_event(self, event) -> None:
         self.events.append(event)
 
+        if(event.event == "thread.run.failed"):
+            self.result.failed = True
+            self.result.error_code = event.data.last_error.code
+            self.result.error_message = event.data.last_error.message
+
     async def on_text_created(self, text) -> None:
         print("Received text created event: " + text.value)
         redis_client.publish(self.result.thread_id, json.dumps({"e": "on_text_created", "v": text.value}))
@@ -112,10 +117,16 @@ class ConversationThreadMessageResponse:
     tool_type: str = ""
     tool_arguments: Optional[dict] = None
 
+    failed: bool = False
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+
 @dataclass
 class ConversationThreadMessage:
     thread_id: str
     message: str
+    role: str = "user"
 
 class ConversationThreadActivities:
     def __init__(self, openai_api_key: str, openai_gateway_url: str, openai_assistant_id: str) -> None:
@@ -134,7 +145,7 @@ class ConversationThreadActivities:
     async def add_message_to_thread(self, message: ConversationThreadMessage):
         await self.openai_client.beta.threads.messages.create(
             thread_id=message.thread_id,
-            role="user",
+            role=message.role,
             content=message.message,
         )
 
@@ -146,7 +157,7 @@ class ConversationThreadActivities:
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-        return json.dumps(data)
+        return data["city"]
 
     @activity.defn
     async def get_response(self, thread_id: str) -> ConversationThreadMessageResponse:

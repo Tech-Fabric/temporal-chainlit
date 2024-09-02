@@ -68,6 +68,12 @@ class ConversationThreadWorkflow:
             )
         )
 
+        await workflow.execute_activity_method(
+            ConversationThreadActivities.add_message_to_thread,
+            ConversationThreadMessage(thread_id=self.thread_id, message="User's city is " + self.remote_city, role="assistant"),
+            schedule_to_close_timeout=timedelta(seconds=5),
+        )
+
         await workflow.wait_condition(lambda: self.thread_closed)
 
         return "thread closed"
@@ -102,7 +108,7 @@ class ConversationThreadWorkflow:
         while(response.tool_call_needed):
             tool_arguments = response.tool_arguments
             tool_arguments.update({
-                "city": self.remote_city,
+                "location": self.remote_city,
             })
 
             tool_call_result = await workflow.execute_activity_method(
